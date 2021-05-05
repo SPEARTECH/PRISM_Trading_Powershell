@@ -1,0 +1,21 @@
+08JUL2019:
+Not removing temp file in MNscript
+-now removes on scan complete
+MNscript getting hung up
+-removed second {System.Windows.Forms.Application]::DoEvents()} line
+-------------------------------------------------------------------------------
+12JUL2019:
+Addition of exe to launch initial script for ease of use.
+Adds desktop shortcut of exe if it's the first time user starts the program.
+Reorganized Launch script for better Linux install experience
+Fixed deb file being recreated.
+Fixed Desktop Shortcut working directory.
+Adjusted prompt of installing Linux.
+-------------------------------------------------------------------------------
+04APR2020
+Changed version name on exe and every script window heading.
+Deleted unnecessary screenshot folders.
+Added enabling Debian to run (start-process powershell -verb runas -WindowStyle Hidden "Enable-WindowsOptionalFeature -NoRestart -Online -FeatureName Microsoft-Windows-Subsystem-Linux"
+) during setup process.
+change management of using the previously added command and restarting the clients machine.
+-------------------------------------------------------------------------------
