@@ -78,7 +78,10 @@ Set-ExecutionPolicy -Scope CurrentUser Bypass
                 } else {  
                 clear
                 echo "Retrieving News..."
-                    $html = Invoke-WebRequest -Uri "https://www.marketwatch.com/search?q=$prompt&m=Ticker&rpp=100&mp=2005&bd=false&rs=true" -UseBasicParsing
+                    $html = "https://query1.finance.yahoo.com/v1/finance/search?q=$prompt"
+                    $res = Invoke-RestMethod -Uri $html -Headers @{ "User-Agent" = "Mozilla/5.0" }
+                    $res.quotes | Select-Object symbol, shortname, exchDisp
+                    # $html = Invoke-WebRequest -Uri "https://www.marketwatch.com/search?q=$prompt&ts=0&tab=All%20News" -UseBasicParsing
                     $html.RawContent > $filepath\temp
                     $source = gc $filepath\temp
                     $time = $source|Out-String -Stream|sls -pattern "$month $day, $year"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split(">")[4]} |Out-String -Stream| %{$_.split(" ")[0]}
