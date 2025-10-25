@@ -1,153 +1,133 @@
 ﻿[Console]::BufferWidth = 3000
 Set-ExecutionPolicy -Scope CurrentUser Bypass
 
-                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-                $filepath = (Get-Item -Path .\ -Verbose).FullName
-                $month = (get-date).Month
-                $year = (get-date).Year
-                $lastyear = ($year - 1)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$filepath = (Get-Item -Path .\ -Verbose).FullName
 
+while (1 -eq 1) {
+    $prompt = Read-Host -Prompt 'ENTER A SYMBOL (or "exit" to quit)'
+    if ($prompt -eq 'exit') {
+        break
+    } else {
+        Clear
+        Write-Host "Retrieving News..."
 
-                if ($month -eq "1"){
-                $month = "Jan."
-                $lastmonth = "Dec."
-                $lastmonthdays = 31
-                } elseif ($month -eq "2"){
-                $month = "Feb."
-                $lastmonth = "Jan."
-                $lastmonthdays = 31
-                } elseif ($month -eq "3"){
-                $month = "March"
-                $lastmonthdays = 28
-                } elseif ($month -eq "4"){
-                $month = "April"
-                $lastmonth = "March"
-                $lastmonthdays = 31
-                } elseif ($month -eq "5"){
-                $month = "May"
-                $lastmonth = "April"
-                $lastmonthdays = 30
-                } elseif ($month -eq "6"){
-                $month = "June"
-                $lastmonth = "May"
-                $lastmonthdays = 31
-                } elseif ($month -eq "7"){
-                $month = "July"
-                $lastmonth = "June"
-                $lastmonthdays = 30
-                } elseif ($month -eq "8"){
-                $month = "Aug."
-                $lastmonth = "July"
-                $lastmonthdays = 31
-                } elseif ($month -eq "9"){
-                $month = "Sept."
-                $lastmonth = "Aug."
-                $lastmonthdays = 31
-                } elseif ($month -eq "10"){
-                $month = "Oct."
-                $lastmonth = "Sept."
-                $lastmonthdays = 30
-                } elseif ($month -eq "11"){
-                $lastmonth = "Nov."
-                $lastmonthdays = 31
-                } elseif ($month -eq "12"){
-                $month = "Dec."
-                $lastmonth = "Nov."
-                $lastmonthdays = 30
-                }
+        # Fetch the raw HTML content
+        $html = "https://query1.finance.yahoo.com/v1/finance/search?q=$prompt"
+        $response = Invoke-WebRequest -Uri $html -Headers @{ "User-Agent" = "Mozilla/5.0" }
 
-                $day = (get-date).Day
-                #$day = (get-date).Day  | ForEach-Object {$_.ToString("0#")}
+        # Save the raw HTML content to a variable
+        $rawContent = $response.Content
 
-                if ((get-date).Dayofweek -eq "Monday") {
-                $yesterdaysday = ($day - 3) #| ForEach-Object {$_.ToString("0#")}
+        # Save the raw HTML content to a file
+        $tempFilePath = Join-Path -Path $filepath -ChildPath "temp"
+        $rawContent | Set-Content -Path $tempFilePath
+
+        # Read the JSON content from the temp file
+        $jsonContent = Get-Content -Path $tempFilePath -Raw | ConvertFrom-Json
+
+        # Extract today's and yesterday's news
+        $allNews = $jsonContent.news
+        $todayDate = (Get-Date).Date
+        $yesterdayDate = $todayDate.AddDays(-1)
+
+        # Filter today's news
+        $todayNews = $allNews | Where-Object {
+            $publishTime = ([datetime]'1970-01-01').AddSeconds($_.providerPublishTime)
+            $publishTime.Date -eq $todayDate
+        }
+
+        # Filter yesterday's news
+        $yesterdayNews = $allNews | Where-Object {
+            $publishTime = ([datetime]'1970-01-01').AddSeconds($_.providerPublishTime)
+            $publishTime.Date -eq $yesterdayDate
+        }
+
+        # Process yesterday's news
+        if ($yesterdayNews) {
+            $yesterdayTitles = @()
+            $yesterdayTimes = @()
+            $yesterdayAmPm = @()
+            foreach ($newsItem in $yesterdayNews) {
+                if ($newsItem.providerPublishTime -ne $null) {
+                    $yesterdayTitles += $newsItem.title
+                    $publishTime = ([datetime]'1970-01-01').AddSeconds($newsItem.providerPublishTime)
+                    $yesterdayTimes += $publishTime.ToString("hh:mm")
+                    $yesterdayAmPm += $publishTime.ToString("tt")
                 } else {
-                $yesterdaysday = ($day - 1) #| ForEach-Object {$_.ToString("0#")}
+                    Write-Host -ForegroundColor Yellow "Skipping news item with missing publish time."
                 }
+            }
 
-                if ($yesterdaysday -lt "1") {
-                    $yesterday = ($lastmonthdays + $yesterdaysday)
+            # Reverse the order of yesterday's news using array slicing
+            $yesterdayTitles = $yesterdayTitles[-1..-($yesterdayTitles.Count)]
+            $yesterdayTimes = $yesterdayTimes[-1..-($yesterdayTimes.Count)]
+            $yesterdayAmPm = $yesterdayAmPm[-1..-($yesterdayAmPm.Count)]
+        } else {
+            Write-Host -BackgroundColor Red "NO NEWS AVAILABLE FOR YESTERDAY"
+        }
+
+        # Output yesterday's news
+        if ($yesterdayTitles) {
+            Write-Host "Yesterday's News:" -BackgroundColor DarkCyan
+            for ($i = 0; $i -lt $yesterdayTitles.Count; $i++) {
+                $formattedTime = "$($yesterdayTimes[$i])$($yesterdayAmPm[$i].ToLower())"
+                $title = $yesterdayTitles[$i]
+                $link = $yesterdayNews[$i].link
+                Write-Host "$formattedTime " -NoNewline
+                Write-Host "$title" -ForegroundColor Cyan -NoNewline
+                Write-Host " ($link)" -ForegroundColor Yellow
+            }
+        }
+
+        # Process today's news
+        if ($todayNews) {
+            $todayTitles = @()
+            $todayTimes = @()
+            $todayAmPm = @()
+            foreach ($newsItem in $todayNews) {
+                if ($newsItem.providerPublishTime -ne $null) {
+                    $todayTitles += $newsItem.title
+                    $publishTime = ([datetime]'1970-01-01').AddSeconds($newsItem.providerPublishTime)
+                    $todayTimes += $publishTime.ToString("hh:mm")
+                    $todayAmPm += $publishTime.ToString("tt")
                 } else {
-                    $yesterday = ($yesterdaysday)
+                    Write-Host -ForegroundColor Yellow "Skipping news item with missing publish time."
                 }
+            }
 
-                while (1 -eq 1) {                                                                                                                                                                                                                                 
-                $prompt = Read-Host -Prompt 'ENTER A SYMBOL (or "exit" to quit)'
-                if ($prompt -eq 'exit') {
-                    break
-                } else {  
-                clear
-                echo "Retrieving News..."
-                    $html = "https://query1.finance.yahoo.com/v1/finance/search?q=$prompt"
-                    $res = Invoke-RestMethod -Uri $html -Headers @{ "User-Agent" = "Mozilla/5.0" }
-                    $res.quotes | Select-Object symbol, shortname, exchDisp
-                    # $html = Invoke-WebRequest -Uri "https://www.marketwatch.com/search?q=$prompt&ts=0&tab=All%20News" -UseBasicParsing
-                    $html.RawContent > $filepath\temp
-                    $source = gc $filepath\temp
-                    $time = $source|Out-String -Stream|sls -pattern "$month $day, $year"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split(">")[4]} |Out-String -Stream| %{$_.split(" ")[0]}
-                    if ($time -eq "<span") {
-                    $time = $source|Out-String -Stream|sls -pattern "$month $day, $year"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split(">")[5]} |Out-String -Stream| %{$_.split(" ")[0]}
-                    }
-                    $ampm = $source|Out-String -Stream|sls -pattern "$month $day, $year" -AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split("=")[3]} |Out-String -Stream| %{$_.split(" ")[1]}
-                    $today = $source|Out-String -Stream|sls -pattern "$month $day, $year" -AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls -Pattern "href" -Context 0,0 | Out-String -Stream | %{$_.split(">")[2]} | Out-String -Stream | %{$_.split("<")[0]}
-                        if (($yesterdaysday -lt "01") -and ($month -eq "01")) {
-                            $yesterdaystime = $source|Out-String -Stream|sls -pattern "$lastmonth $yesterday, $lastyear"-AllMatches -Context 5,5| Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split("=")[1]} |Out-String -Stream| %{$_.split(">")[2]}|Out-String -Stream| %{$_.split(" ")[0]}
-                            #if ($yesterdaystime -eq "<span") {
-                            #$yesterdaystime = $source|Out-String -Stream|sls -pattern "$lastmonth. $yesterday, $lastyear"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split(">")[5]} |Out-String -Stream| %{$_.split(" ")[0]}
-                            #}
-                            $yesterdaysampm = $source|Out-String -Stream|sls -pattern "$lastmonth $yesterday, $lastyear"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split("=")[1]} |Out-String -Stream| %{$_.split(" ")[1]}
-                            $yesterdaysnews = $source|Out-String -Stream|sls -pattern "$lastmonth $yesterday, $lastyear"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls -Pattern "href" -Context 0,0 | Out-String -Stream | %{$_.split(">")[2]} | Out-String -Stream | %{$_.split("<")[0]}
-                            $yesterdaysdate = "$yesterday,$lastmonth,$lastyear"
-                        } elseif ($yesterdaysday -lt "01") {
-                            $yesterdaystime = $source|Out-String -Stream|sls -pattern "$lastmonth $yesterday, $year"-AllMatches -Context 5,5| Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split("=")[1]} |Out-String -Stream| %{$_.split(">")[2]}|Out-String -Stream| %{$_.split(" ")[0]}
-                            #if ($yesterdaystime -eq "<span") {
-                            #$yesterdaystime = $source|Out-String -Stream|sls -pattern "$lastmonth. $yesterday, $year"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split(">")[4]} |Out-String -Stream| %{$_.split(" ")[0]}
-                            #}
-                            $yesterdaysampm = $source|Out-String -Stream|sls -pattern "$lastmonth $yesterday, $year"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split("=")[1]} |Out-String -Stream| %{$_.split(" ")[1]}
-                            $yesterdaysnews = $source|Out-String -Stream|sls -pattern "$lastmonth $yesterday, $year"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls -Pattern "href" -Context 0,0 | Out-String -Stream | %{$_.split(">")[2]} | Out-String -Stream | %{$_.split("<")[0]}
-                            $yesterdaysdate = "$yesterday,$lastmonth,$year"
-                        } else {
-                            $yesterdaystime = $source|Out-String -Stream|sls -pattern "$month $yesterday, $year"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split("=")[1]} |Out-String -Stream| %{$_.split(">")[2]}|Out-String -Stream| %{$_.split(" ")[0]}
-                            #if ($yesterdaystime -eq "<span") {
-                            #$yesterdaystime = $source|Out-String -Stream|sls -pattern "$month. $yesterday, $year"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split(">")[4]} |Out-String -Stream| %{$_.split(" ")[0]}
-                            #}
-                            $yesterdaysampm = $source|Out-String -Stream|sls -pattern "$month $yesterday, $year"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls  -Pattern "<span" -Context 0,0 | Out-String -Stream| %{$_.split("=")[1]}|Out-String -Stream| %{$_.split(" ")[1]}
-                            $yesterdaysnews = $source|Out-String -Stream|sls -pattern "$month $yesterday, $year"-AllMatches -Context 5,5 | Out-String -Stream| sls -Pattern "href" -AllMatches -SimpleMatch -Context 0,5 | Out-String -Stream | sls -Pattern "href" -Context 0,0 | Out-String -Stream | %{$_.split(">")[2]} | Out-String -Stream | %{$_.split("<")[0]}
-                            $yesterdaysdate = "$yesterday,$month,$year"
-                        }
-                        clear
-                        if ($yesterdaysnews -or $today) {
-                            if ($yesterdaysnews) {
-                                $lines = $yesterdaysnews |Out-String -Stream|Measure-Object -Line | Format-Wide |Out-String -Stream| ? {$_.trim() -ne "" }
-                                $intnum = 0
-                                     while ($intnum -le $lines - 1) {
-                                         Write-Host -BackgroundColor DarkCyan "$($yesterdaystime |Out-String -Stream|Select-Object -Index $intnum)$($yesterdaysampm |Out-String -Stream|Select-Object -Index $intnum) $($yesterdaysnews|Out-String -Stream|select -Index $intnum)"
-                                         $intnum ++
-                                     }
-                            }
-                            if ($today) {
-                              $lines = $today |Out-String -Stream|Measure-Object -Line | Format-Wide |Out-String -Stream| ? {$_.trim() -ne "" }
-                              $intnum = 0
-                                 while ($intnum -le $lines - 1) {
-                                   Write-Host -BackgroundColor DarkGreen "$($time |Out-String -Stream|Select-Object -Index $intnum)$($ampm |Out-String -Stream|Select-Object -Index $intnum) $($today|Out-String -Stream|select -Index $intnum)"
-                                   $intnum ++
-                                 }  
-                            } 
-                                                
-                         } else {
-                                Write-Host -BackgroundColor Red NO NEWS AVAILABLE
-                               
-                         }
-                  Write-Host $prompt
-                  rm $filepath\temp
-                 } 
-                 }              
-                 #if (gc $filepath\temp -TotalCount 5) {
-                 #    gc $filepath\temp -TotalCount 5
-                 #    rm $filepath\temp
-                 #    Write-Host -BackgroundColor Red NO NEWS AVAILABLE
-                 #    } else {
-                 #    }
-             
-             
-          
+            # Reverse the order of today's news using array slicing
+            $todayTitles = $todayTitles[-1..-($todayTitles.Count)]
+            $todayTimes = $todayTimes[-1..-($todayTimes.Count)]
+            $todayAmPm = $todayAmPm[-1..-($todayAmPm.Count)]
+        } else {
+            Write-Host -BackgroundColor Red "NO NEWS AVAILABLE FOR TODAY"
+        }
+
+        # Output today's news
+        if ($todayTitles) {
+            Write-Host "Today's News:" -BackgroundColor DarkGreen
+            for ($i = 0; $i -lt $todayTitles.Count; $i++) {
+                $formattedTime = "$($todayTimes[$i])$($todayAmPm[$i].ToLower())"
+                $title = $todayTitles[$i]
+                $link = $todayNews[$i].link
+                Write-Host "$formattedTime " -NoNewline
+                Write-Host "$title" -ForegroundColor Cyan -NoNewline
+                Write-Host " ($link)" -ForegroundColor Yellow
+            }
+        }
+
+        # Clean up the temp file
+        Remove-Item -Path $tempFilePath -Force
+
+        # Reset news variables
+        $todayNews = $null
+        $yesterdayNews = $null
+        $todayTitles = $null
+        $todayTimes = $null
+        $todayAmPm = $null
+        $yesterdayTitles = $null
+        $yesterdayTimes = $null
+        $yesterdayAmPm = $null
+    }
+}
